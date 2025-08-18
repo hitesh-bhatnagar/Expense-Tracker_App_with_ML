@@ -1,0 +1,133 @@
+﻿<Window x:Class="ExpenseTracker.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Smart Expense Tracker"
+        Height="520"
+        Width="900"
+        WindowStartupLocation="CenterScreen">
+
+    <DockPanel LastChildFill="True" Background="#1e1e2f" Margin="20">
+
+        <!-- Menu at the top -->
+        <Menu DockPanel.Dock="Top" Background="#333">
+            <MenuItem Header="File" Foreground="White">
+                <MenuItem Header="Export CSV" Background ="#333" Foreground="white" Click="ExportCsv_Click"/>
+                <MenuItem Header= "Analyzer" Background="#333" Foreground="White" Click="RunAnalyzer_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Main Content Grid -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Search and Add Button Row -->
+            <StackPanel Orientation="Horizontal" 
+                        HorizontalAlignment="Stretch" 
+                        Grid.Row="0"
+                        Margin="0,0,0,10"
+                        VerticalAlignment="Center">
+
+                <!-- Search TextBox -->
+                <TextBox Width="250"
+                         Margin="0,0,10,0"
+                         VerticalAlignment="Center"
+                         Padding="8,4"
+                         FontSize="14"
+                         Background="White"
+                         Foreground="Black"
+                         Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Type to search by description, amount, or date"/>
+
+                
+                <Button Content="Add" Command="{Binding OpenAddFormCommand}" Margin="5"/>
+                <Button Content="Edit" Command="{Binding OpenEditFormCommand}" CommandParameter="{Binding SelectedExpense}" Margin="5"/>
+
+            </StackPanel>
+
+            <!-- DataGrid -->
+            <DataGrid x:Name="ExpenseGrid"
+                      Grid.Row="1"
+                      ItemsSource="{Binding Expenses}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="False"
+                      SelectionMode="Single"
+                      SelectedItem="{Binding SelectedExpense, Mode=TwoWay}"
+                      CanUserAddRows="False"
+                      Background="#2a2a3d"
+                      Foreground="White"
+                      BorderBrush="Transparent"
+                      RowBackground="#2a2a3d"
+                      AlternatingRowBackground="#32324a"
+                      HeadersVisibility="Column"
+                      FontSize="14"
+                      GridLinesVisibility="None"
+                      RowEditEnding="ExpenseGrid_RowEditEnding"
+                      Margin="0">
+
+                <!-- Column Header Style -->
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#1e1e2f"/>
+                        <Setter Property="Foreground" Value="White"/>
+                        <Setter Property="FontWeight" Value="Bold"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Padding" Value="8"/>
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+
+                <!-- Columns -->
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="ID"
+                                        Binding="{Binding DisplayNumber}"
+                                        Width="Auto"
+                                        IsReadOnly="True"/>
+
+                    <DataGridTextColumn Header="Description"
+                                        Binding="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="*"/>
+
+                    <DataGridTextColumn Header="Amount" Width="Auto">
+                        <DataGridTextColumn.Binding>
+                            <Binding Path="Amount" StringFormat="C2" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged"/>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+
+                    <!-- Date with DatePicker -->
+                    <DataGridTemplateColumn Header="Date" Width="Auto">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Date, StringFormat=d}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate>
+                                <DatePicker SelectedDate="{Binding Date, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            DisplayDate="{Binding Date}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Delete Button Column -->
+                    <DataGridTemplateColumn Header="Actions" Width="150">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0">
+                                    <Button Content="Delete"
+                                            Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            Padding="5,2" Margin="2,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </DockPanel>
+</Window>
