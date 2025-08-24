@@ -67,7 +67,7 @@ namespace ExpenseTracker
 
                 using (var context = new AppDbContext())
                 {
-                    var expenses = context.Expenses.OrderBy(e => e.Date).ToList();
+                    var expenses = context.Expenses.OrderBy(exp => exp.Date).ToList();
                     using (var writer = new StreamWriter(csvPath))
                     {
                         writer.WriteLine("Id,Description,Amount,Date");
@@ -78,11 +78,14 @@ namespace ExpenseTracker
                     }
                 }
 
-                // 2. Run analyzer.py in Python (synchronously)
+                // 2. Run analyzer.py with venv Python
+                string analyzerScript = "analyzer.py";
+                string venvPython = Path.Combine(mlFolder, ".venv", "Scripts", "python.exe");
+
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "python",
-                    Arguments = "analyzer.py",
+                    FileName = venvPython,
+                    Arguments = $"\"{analyzerScript}\" --out trend.html",
                     WorkingDirectory = mlFolder,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -90,17 +93,42 @@ namespace ExpenseTracker
                     CreateNoWindow = true
                 };
 
-                var process = Process.Start(psi);
-                process.WaitForExit();  // wait until analyzer finishes
+                string stdOutput, stdError;
+                using (var process = Process.Start(psi))
+                {
+                    stdOutput = process.StandardOutput.ReadToEnd();
+                    stdError = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+                }
 
-                // 3. Now open trend.html in default browser from C#
+                // Filter out harmless logs
+                string filteredError = string.Join("\n",
+                    stdError.Split('\n')
+                            .Where(line => !line.Contains("INFO"))
+                            .Where(line => !string.IsNullOrWhiteSpace(line))
+                );
+
+                if (!string.IsNullOrEmpty(filteredError))
+                {
+                    MessageBox.Show("Python error:\n" + filteredError, "Analyzer Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // 3. Open the latest HTML file in default browser
                 if (File.Exists(htmlPath))
                 {
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = htmlPath,
-                        UseShellExecute = true   // this opens with default browser
+                        FileName = htmlPath,   // ✅ plain file path (no file:///)
+                        UseShellExecute = true
                     });
+                }
+                else
+                {
+                    MessageBox.Show("trend.html was not generated!", "Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
 
                 MessageBox.Show("Analysis complete! Report opened in browser.", "Analyzer",
@@ -112,44 +140,6 @@ namespace ExpenseTracker
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
-
-        // Import expenses from CSV
-        //private void ImportCsv_Click(object sender, RoutedEventArgs e)
-        //{
-        //    var openFileDialog = new OpenFileDialog
-        //    {
-        //        Filter = "CSV files (*.csv)|*.csv",
-        //        Title = "Import Expenses"
-        //    };
-
-        //    if (openFileDialog.ShowDialog() == true)
-        //    {
-        //        try
-        //        {
-        //            using (var reader = new StreamReader(openFileDialog.FileName))
-        //            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
-        //            {
-        //                csv.Context.RegisterClassMap<ExpenseMap>(); // Register the map
-        //                var importedExpenses = csv.GetRecords<Expense>().ToList();
-
-        //                using var context = new AppDbContext();
-        //                context.Expenses.AddRange(importedExpenses);
-        //                context.SaveChanges();
-        //            }
-
-
-        //            MessageBox.Show("Expenses imported successfully!", "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-
-        //            if (DataContext is MainViewModel vm)
-        //                vm.LoadData();
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            MessageBox.Show("Error importing data: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        //        }
-        //    }
-        //}
 
         // Handle row edits to save changes to DB
         private void ExpenseGrid_RowEditEnding(object sender, DataGridRowEditEndingEventArgs e)
