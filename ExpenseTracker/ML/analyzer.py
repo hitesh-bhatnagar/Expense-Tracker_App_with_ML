@@ -1,9 +1,4 @@
-﻿# analyzer.py
-# Professional Expense Analyzer Dashboard
-# Requirements: pandas, plotly, prophet
-# Usage: python analyzer.py --out trend.html --open
-
-import os
+﻿import os   
 import argparse
 import pandas as pd
 import numpy as np
@@ -13,13 +8,12 @@ from plotly.subplots import make_subplots
 import webbrowser
 from datetime import timedelta
 
-# ---------- CLI ----------
 parser = argparse.ArgumentParser()
 parser.add_argument("--open", action="store_true", help="Open the generated HTML in browser")
 parser.add_argument("--out", default="trend.html", help="Output HTML file name")
 args = parser.parse_args()
 
-# ---------- Helpers ----------
+#   Helpers 
 def safe_read_csv(path):
     if not os.path.exists(path):
         print("No expenses.csv found. Export from the app first.")
@@ -36,7 +30,7 @@ def money(x):
     except:
         return str(x)
 
-# ---------- Load & sanitize ----------
+#       Load Data
 csv_path = "expenses.csv"
 data = safe_read_csv(csv_path)
 
@@ -49,7 +43,7 @@ data["Description"] = data["Description"].fillna("Other").astype(str)
 data["Date"] = pd.to_datetime(data["Date"])
 data = data.sort_values("Date")
 
-# Quick KPIs
+# Quick key performance indicators
 total_spend = data["Amount"].sum()
 first_date = data["Date"].min()
 last_date = data["Date"].max()
@@ -59,34 +53,46 @@ top_cat = data.groupby("Description")["Amount"].sum().sort_values(ascending=Fals
 top1 = top_cat.index[0] if not top_cat.empty else "N/A"
 top1_amount = top_cat.iloc[0] if not top_cat.empty else 0.0
 
-# ---------- Aggregate for bar chart: top categories + Others ----------
+# Aggregate for bar chart: top categories + Others 
 cat_sums = data.groupby("Description", as_index=True)["Amount"].sum().sort_values(ascending=False)
-# choose top N categories to show separately
+
+
+#   choose top N categories to show separately
 TOP_N = 6
 top_categories = list(cat_sums.index[:TOP_N])
 others = cat_sums.index[TOP_N:]
-# build dataframe: daily totals per top-category + others aggregated
+
+#  daily totals per top-category + others aggregated
+
+
 data["Day"] = data["Date"].dt.normalize()
 daily_cat = (data.groupby(["Day", "Description"])["Amount"]
              .sum()
              .reset_index())
-# pivot
+
+
+
 pivot = daily_cat.pivot(index="Day", columns="Description", values="Amount").fillna(0)
+
 # ensure top columns order
 for c in top_categories:
     if c not in pivot.columns:
         pivot[c] = 0.0
+
+
 # compute Others as sum of small categories
 pivot["Others"] = pivot[[c for c in pivot.columns if c not in top_categories]].sum(axis=1)
+
+
 # keep only top_categories + Others
 bar_cols = top_categories + ["Others"]
 pivot = pivot.reindex(columns=bar_cols).fillna(0)
 
-# create a daily totals series (for range and outlier handling)
+#   create a daily totals series
 daily_totals = pivot.sum(axis=1).rename("DailyTotal").reset_index()
 daily_totals["Day"] = pd.to_datetime(daily_totals["Day"])
 
-# ---------- Outlier handling (visual cap) ----------
+#   Outlier handling 
 cap_pct = 0.98
 if len(daily_totals) >= 1:
     cap_val = float(daily_totals["DailyTotal"].quantile(cap_pct))
@@ -94,7 +100,7 @@ if len(daily_totals) >= 1:
 else:
     cap_top = daily_totals["DailyTotal"].max() if not daily_totals.empty else 0.0
 
-# ---------- Forecast using Prophet on daily totals ----------
+#   Forecast using Prophet on daily totals 
 daily_prophet = daily_totals.rename(columns={"Day": "ds", "DailyTotal": "y"}).dropna(subset=["y"])
 have_forecast = len(daily_prophet) >= 2
 forecast_df = None
@@ -105,15 +111,15 @@ if have_forecast:
     m.fit(daily_prophet)
     future = m.make_future_dataframe(periods=30)
     forecast_df = m.predict(future)
-    # compute next-30-days predicted sum (only future rows)
+    # compute next-30-days predicted sum 
     last_known = daily_prophet["ds"].max()
     future_only = forecast_df[forecast_df["ds"] > last_known]
     forecast_next_30_sum = float(future_only["yhat"].sum())
 
-# ---------- Build figures ----------
-# 1) Transactions: stacked bar for top categories + Others, and small scatter for raw transactions
+#   Build figures 
+#        Transactions: stacked bar for top categories + Others, and small scatter for raw transactions
 transactions_fig = go.Figure()
-colors = ["#2EC4B6", "#3D8DF0", "#8E44AD", "#FF7A59", "#FFC857", "#6D9886", "#999999"]  # colors for top categories + others
+colors = ["#2EC4B6", "#3D8DF0", "#8E44AD", "#FF7A59", "#FFC857", "#6D9886", "#999999"]  
 
 for i, col in enumerate(bar_cols):
     transactions_fig.add_trace(go.Bar(
@@ -124,9 +130,9 @@ for i, col in enumerate(bar_cols):
         hovertemplate="Day: %{x|%d %b %Y}<br>Category: " + str(col) + "<br>Amount: ₹%{y:.2f}<extra></extra>",
     ))
 
-# overlay individual transactions as jittered points (semi-transparent)
+
 np.random.seed(2)
-jitter = (np.random.rand(len(data)) - 0.5) * 0.6  # fraction of a day
+jitter = (np.random.rand(len(data)) - 0.5) * 0.6  
 txn_x = data["Date"] + pd.to_timedelta(jitter, unit="D")
 transactions_fig.add_trace(go.Scatter(
     x=txn_x,
@@ -138,7 +144,8 @@ transactions_fig.add_trace(go.Scatter(
     text=data["Description"]
 ))
 
-# outlier annotation: if daily total > cap_top show marker/annotation
+#   outlier annotation: if daily total > cap_top show marker/annotation
+
 outlier_days = daily_totals[daily_totals["DailyTotal"] > cap_top]
 if not outlier_days.empty:
     transactions_fig.add_trace(go.Scatter(
@@ -154,7 +161,7 @@ if not outlier_days.empty:
 
 transactions_fig.update_layout(barmode="stack")
 
-# 2) Forecast figure
+#   Forecast figure
 forecast_fig = go.Figure()
 if have_forecast:
     forecast_fig.add_trace(go.Scatter(x=forecast_df["ds"], y=forecast_df["yhat_upper"], mode="lines", line=dict(width=0), showlegend=False))
@@ -162,13 +169,16 @@ if have_forecast:
     forecast_fig.add_trace(go.Scatter(x=forecast_df["ds"], y=forecast_df["yhat"], mode="lines", line=dict(color="#0ea5e9", width=3), name="Forecast"))
     forecast_fig.add_trace(go.Scatter(x=daily_prophet["ds"], y=daily_prophet["y"], mode="markers", marker=dict(size=6, color="#9EEAF9"), name="Actual"))
 
-# 3) Pie (donut)
-# Limit pie to top 8 labels, group the rest in Others already done (cat_final style)
+#  Pie chart
+
+# Limit pie to top 8 labels, group the rest in Others 
 pie_labels = list(cat_sums.index[:TOP_N]) + (["Others (other categories)"] if len(cat_sums) > TOP_N else [])
 pie_values = [cat_sums.get(l, 0.0) for l in pie_labels]
-# If we have an "Others" value from pivot:
+
+
+
 if "Others" in pivot.columns:
-    # The pivot's "Others" is aggregated per day; we prefer cat_sums 'Others' (computed earlier)
+   
     others_val = cat_sums[~cat_sums.index.isin(top_categories)].sum()
     if others_val > 0 and len(cat_sums) > TOP_N:
         pie_values = [cat_sums.get(l, 0.0) for l in top_categories] + [others_val]
@@ -176,8 +186,8 @@ if "Others" in pivot.columns:
 pie_fig = go.Figure(go.Pie(labels=pie_labels, values=pie_values, hole=0.45, textinfo="percent+label",
                            insidetextorientation="radial", marker=dict(line=dict(color="rgba(255,255,255,0.25)", width=0.8))))
 
-# ---------- Cosmetic layout & KPI HTML assembly ----------
-# build KPI values
+#Cosmetic layout & KPI HTML assembly 
+
 kpis = {
     "Total Spend": money(total_spend),
     "Avg / day": money(avg_per_day),
@@ -185,7 +195,6 @@ kpis = {
     "Forecast next 30d": money(forecast_next_30_sum) if forecast_next_30_sum is not None else "N/A"
 }
 
-# chart layout polish
 common_layout = dict(
     template="plotly_dark",
     paper_bgcolor="rgba(14,14,30,1)",
@@ -201,19 +210,21 @@ transactions_fig.update_layout(
     hovermode="x unified",
     **common_layout
 )
-# cap Y for transactions to keep readability
+
+
 if cap_top > 0:
     transactions_fig.update_yaxes(range=[0, cap_top * 1.05])
 
 forecast_fig.update_layout(title="Forecasted Expenses (next 30 days)", xaxis=dict(title="Date"), yaxis=dict(title="Amount (₹)"), hovermode="x unified", **common_layout)
 pie_fig.update_layout(title="Spending Breakdown (top categories)", **common_layout)
 
-# convert figures to HTML fragments (no full html wrapper)
 transactions_div = transactions_fig.to_html(full_html=False, include_plotlyjs="cdn", default_height=350)
 forecast_div = forecast_fig.to_html(full_html=False, include_plotlyjs=False, default_height=420)
 pie_div = pie_fig.to_html(full_html=False, include_plotlyjs=False, default_height=300)
 
-# Compose final HTML (with CSS & JS)
+
+#                            Compose final HTML 
+
 html_template = f"""
 <!doctype html>
 <html>
@@ -346,7 +357,8 @@ html_template = f"""
 </html>
 """
 
-#  Write file 
+
+
 out_path = os.path.abspath(args.out)
 with open(out_path, "w", encoding="utf-8") as f:
     f.write(html_template)
